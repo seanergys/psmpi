@@ -238,6 +238,7 @@ struct MPIR_Comm {
 #ifdef MPID_DEV_COMM_DECL
      MPID_DEV_COMM_DECL
 #endif
+     MPIR_Info * info_ptr;      /* Pointer to a clone of the MPI info object passed via MPI_Comm_set_info() */
 };
 
 /* Bit flags for comm->attr */
