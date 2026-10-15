@@ -672,38 +672,47 @@ int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
         /* If not found, check if a matching compressor plugin can be loaded. */
         if (!compressor_found) {
 
-            if (!MPIDI_Process.env.compressor.enable_plugins_str) {
+            if (!MPIDI_Process.env.compressor.enable_plugins_str ||
+                (MPIDI_Process.env.compressor.enable_plugins_str[0] == '\0') ||
+                (strcmp(MPIDI_Process.env.compressor.enable_plugins_str, "0") == 0)) {
                 /* Compressor plugins not activated at runtime: Do nothing! */
                 goto fn_exit;
             }
 
-            /* Check if there is a plugin name given via the environment variable. */
-            char *end;
-            long val;
-            errno = 0;
-            val = strtol(MPIDI_Process.env.compressor.enable_plugins_str, &end, 10);
-
-            if (end == MPIDI_Process.env.compressor.enable_plugins_str) {
-                /* Set this as the plugin name in the info object. */
-                MPIR_Info_set_impl(info, compressor_info_key_plugin,
-                                   MPIDI_Process.env.compressor.enable_plugins_str);
-            } else if (!val) {
-                /* Plugin use is disabled explicitly. */
-                goto fn_exit;
-            }
-
-            /* First check if (a list of) plugin name(s) was given. */
-            char info_compressor_plugins[MPI_MAX_INFO_VAL + 1];
+            /* First check if (a list of) plugin name(s) was given via the info object. */
+            char info_compressor_plugins[MPI_MAX_INFO_VAL + 1] = { 0 };
             MPIR_Info_get_impl(info, compressor_info_key_plugin, MPI_MAX_INFO_VAL,
                                info_compressor_plugins, &info_flag);
             if (!info_flag) {
                 MPIR_Info_get_impl(info, compressor_info_key_plugin_list, MPI_MAX_INFO_VAL,
                                    info_compressor_plugins, &info_flag);
-                if (!info_flag) {
-                    goto fn_exit;
+            } else {
+                /* In case both info keys are given, concatenate them then into a comma-separated list. */
+                size_t list_len = strlen(info_compressor_plugins);
+                if (list_len < MPI_MAX_INFO_VAL) {
+                    info_compressor_plugins[list_len] = ',';
+                    info_compressor_plugins[list_len + 1] = '\0';
+                    MPIR_Info_get_impl(info, compressor_info_key_plugin_list,
+                                       MPI_MAX_INFO_VAL - list_len - 1,
+                                       info_compressor_plugins + list_len + 1, &info_flag);
+                    if (!info_flag) {
+                        info_compressor_plugins[list_len] = '\0';
+                    }
                 }
             }
 
+            /* Additionally, check if there is a plugin name/list (and not just "1" for "enabled")
+             * given via the environment variable. */
+            if (strcmp(MPIDI_Process.env.compressor.enable_plugins_str, "1") != 0) {
+                /* If yes, append this string to `info_compressor_plugins` as a comma-separated list. */
+                size_t list_len = strlen(info_compressor_plugins);
+                snprintf(info_compressor_plugins + list_len, MPI_MAX_INFO_VAL - list_len, "%s%s",
+                         list_len ? "," : "", MPIDI_Process.env.compressor.enable_plugins_str);
+            }
+            /* Loop over all given plugin names in the comma-separated list. Note that a given plugin
+             * (following the BusyBox principle) may well be responsible for *multiple* compressors.
+             * The entry function for registering then has to determine, based on the compressor name,
+             * whether the plugin can handle the requested compressor or not. */
             for (char *save_ptr = NULL, *plugin_name =
                  strtok_r(info_compressor_plugins, compressor_info_key_plugin_separator, &save_ptr);
                  plugin_name != NULL;
@@ -714,6 +723,9 @@ int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
                 char *dlerror_str;
                 MPIX_Compressor_register_plugin_function *compressor_register_fn;
 
+                /* We don't need to check here whether these have already been loaded, because opening them
+                 * multiple times via `dlopen()` shouldn't be a problem (also in terms of resource usage).
+                 * Note that the loaded shared-library is implicitly released at the end of the process. */
                 dlerror();
                 dlhandle = dlopen(plugin_name, RTLD_LAZY);
                 dlerror_str = dlerror();
