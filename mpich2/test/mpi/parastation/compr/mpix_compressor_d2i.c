@@ -17,6 +17,10 @@
 #include <stdio.h>
 #endif
 
+#ifndef COMPRESSOR_NAME
+#define COMPRESSOR_NAME "pscompr_d2i"
+#endif
+
 #ifdef WITH_COMPRESSOR_PLUGIN
 /* In this plugin mode, only the callbacks are compiled and the main
  * function is omitted. This allows to generate a compressor plugin
@@ -83,7 +87,8 @@ int compressor_inflate(void *buf, int partition, MPI_Count count, MPI_Datatype d
 /* entry function for compressor plugin */
 int compressor_register(const char *name, MPI_Info info)
 {
-    MPIX_Register_compressor(name,
+    /* Ignore passed `name` and register as "pscompr_d2i". */
+    MPIX_Register_compressor("pscompr_d2i",
                              compressor_req_init,
                              MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
                              compressor_deflate,
@@ -133,14 +138,14 @@ int main(int argc, char *argv[])
     dtype = MPI_DOUBLE;
 #endif
 
-    MPIX_Register_compressor("darexa-f",
+    MPIX_Register_compressor(COMPRESSOR_NAME,
                              compressor_req_init,
                              MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
                              compressor_deflate, compressor_inflate,
                              MPIX_COMPRESSOR_DEREGISTER_FN_NULL, MPI_INFO_NULL, NULL);
 
     MPI_Info_create(&info);
-    MPI_Info_set(info, "compressor", "darexa-f");
+    MPI_Info_set(info, "compressor", COMPRESSOR_NAME);
 
 #ifdef WITH_INFO_VIA_COMM
     MPI_Comm_set_info(MPI_COMM_WORLD, info);

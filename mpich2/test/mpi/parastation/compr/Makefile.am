@@ -54,7 +54,7 @@ mpix_compressor_plg_d2i_no_info_CPPFLAGS = -DWITHOUT_COMPRESSOR_INFO
 
 mpix_compressor_plg_c2i_no_info_SOURCES = mpix_compressor_plg.c
 mpix_compressor_plg_c2i_no_info_LDADD = libmpix_compressor_c2i.la
-mpix_compressor_plg_2ci_no_info_CPPFLAGS = -DWITHOUT_COMPRESSOR_INFO
+mpix_compressor_plg_c2i_no_info_CPPFLAGS = -DWITHOUT_COMPRESSOR_INFO
 
 mpix_compressor_plg_c2d2i_no_info_SOURCES = mpix_compressor_plg.c
 mpix_compressor_plg_c2d2i_no_info_LDADD = libmpix_compressor_c2d2i.la

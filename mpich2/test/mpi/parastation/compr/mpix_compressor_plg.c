@@ -45,20 +45,26 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     MPI_Info_create(&info);
-    MPI_Info_set(info, "compressor", "darexa-f");
+    MPI_Info_set(info, "compressor", "pscompr");
 
     if (argc > 1) {
-        if (!strcmp(argv[1], "double_complex")) {
+        if (!strcmp(argv[1], "double")) {
+            dtype = MPI_DOUBLE;
+        } else if (!strcmp(argv[1], "double_complex")) {
             dtype = MPI_DOUBLE_COMPLEX;
-        } else {
-            MPI_Info_set(info, "compressor_plugin", argv[1]);
         }
     }
 
     if (argc > 2) {
-        if (!strcmp(argv[2], "double_complex")) {
-            dtype = MPI_DOUBLE_COMPLEX;
-        }
+        MPI_Info_set(info, "compressor", argv[2]);
+    }
+
+    if (argc > 3) {
+        MPI_Info_set(info, "compressor_plugin", argv[3]);
+    }
+
+    if (argc > 4) {
+        MPI_Info_set(info, "compressor_plugins", argv[4]);
     }
 
     if (rank == 0) {

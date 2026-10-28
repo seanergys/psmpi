@@ -11,10 +11,15 @@
 #include "mpi.h"
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 #ifndef WITH_COMPRESSOR_PLUGIN
 #include "mpitest.h"
 #include "mpitestconf.h"
 #include <stdio.h>
+#endif
+
+#ifndef COMPRESSOR_NAME
+#define COMPRESSOR_NAME "pscompr_c2i"
 #endif
 
 #ifdef WITH_COMPRESSOR_PLUGIN
@@ -101,12 +106,15 @@ int compressor_inflate(void *buf, int partition, MPI_Count count, MPI_Datatype d
 /* entry function for compressor plugin */
 int compressor_register(const char *name, MPI_Info info)
 {
-    MPIX_Register_compressor(name,
-                             compressor_req_init,
-                             MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
-                             compressor_deflate,
-                             compressor_inflate,
-                             MPIX_COMPRESSOR_DEREGISTER_FN_NULL, MPI_INFO_NULL, NULL);
+    /* Register only if the requested name matches the name of this plugin: */
+    if (!strcmp(name, COMPRESSOR_NAME)) {
+        MPIX_Register_compressor(name,
+                                 compressor_req_init,
+                                 MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
+                                 compressor_deflate,
+                                 compressor_inflate,
+                                 MPIX_COMPRESSOR_DEREGISTER_FN_NULL, MPI_INFO_NULL, NULL);
+    }
 
     return MPI_SUCCESS;
 }
@@ -154,14 +162,14 @@ int main(int argc, char *argv[])
     dtype = MPI_DOUBLE_COMPLEX;
 #endif
 
-    MPIX_Register_compressor("darexa-f",
+    MPIX_Register_compressor(COMPRESSOR_NAME,
                              compressor_req_init,
                              MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
                              compressor_deflate, compressor_inflate,
                              MPIX_COMPRESSOR_DEREGISTER_FN_NULL, MPI_INFO_NULL, NULL);
 
     MPI_Info_create(&info);
-    MPI_Info_set(info, "compressor", "darexa-f");
+    MPI_Info_set(info, "compressor", COMPRESSOR_NAME);
 
 #ifdef WITH_INFO_VIA_COMM
     MPI_Comm_set_info(MPI_COMM_WORLD, info);
