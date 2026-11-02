@@ -20,45 +20,45 @@ mpix_compressor_d2i_derived_SOURCES = mpix_compressor_d2i.c
 mpix_compressor_c2i_derived_CPPFLAGS = $(AM_CPPFLAGS) -DWITH_DERIVED_DTYPE
 mpix_compressor_c2i_derived_SOURCES = mpix_compressor_c2i.c
 
-libmpix_compressor_nop_la_CPPFLAGS = -DWITH_COMPRESSOR_PLUGIN
+libmpix_compressor_nop_la_CPPFLAGS = $(AM_CPPFLAGS) -DWITH_COMPRESSOR_PLUGIN
 libmpix_compressor_nop_la_SOURCES = mpix_compressor_nop.c
 
-libmpix_compressor_d2i_la_CPPFLAGS = -DWITH_COMPRESSOR_PLUGIN
+libmpix_compressor_d2i_la_CPPFLAGS = $(AM_CPPFLAGS) -DWITH_COMPRESSOR_PLUGIN
 libmpix_compressor_d2i_la_SOURCES = mpix_compressor_d2i.c
 
-libmpix_compressor_c2i_la_CPPFLAGS = -DWITH_COMPRESSOR_PLUGIN
+libmpix_compressor_c2i_la_CPPFLAGS = $(AM_CPPFLAGS) -DWITH_COMPRESSOR_PLUGIN
 libmpix_compressor_c2i_la_SOURCES = mpix_compressor_c2i.c
 
-libmpix_compressor_c2d2i_la_CPPFLAGS = -DWITH_COMPRESSOR_PLUGIN
+libmpix_compressor_c2d2i_la_CPPFLAGS = $(AM_CPPFLAGS) -DWITH_COMPRESSOR_PLUGIN
 libmpix_compressor_c2d2i_la_SOURCES = mpix_compressor_c2d2i.c
 
 mpix_compressor_plg_nop_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_nop_LDADD = libmpix_compressor_nop.la
+mpix_compressor_plg_nop_LDADD = $(LDADD) libmpix_compressor_nop.la
 
 mpix_compressor_plg_d2i_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_d2i_LDADD = libmpix_compressor_d2i.la
+mpix_compressor_plg_d2i_LDADD = $(LDADD) libmpix_compressor_d2i.la
 
 mpix_compressor_plg_c2i_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_c2i_LDADD = libmpix_compressor_c2i.la
+mpix_compressor_plg_c2i_LDADD = $(LDADD) libmpix_compressor_c2i.la
 
 mpix_compressor_plg_c2d2i_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_c2d2i_LDADD = libmpix_compressor_c2d2i.la
+mpix_compressor_plg_c2d2i_LDADD = $(LDADD) libmpix_compressor_c2d2i.la
 
 mpix_compressor_plg_nop_no_info_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_nop_no_info_LDADD = libmpix_compressor_nop.la
-mpix_compressor_plg_nop_no_info_CPPFLAGS = -DWITHOUT_COMPRESSOR_INFO
+mpix_compressor_plg_nop_no_info_LDADD = $(LDADD) libmpix_compressor_nop.la
+mpix_compressor_plg_nop_no_info_CPPFLAGS = $(AM_CPPFLAGS) -DWITHOUT_COMPRESSOR_INFO
 
 mpix_compressor_plg_d2i_no_info_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_d2i_no_info_LDADD = libmpix_compressor_d2i.la
-mpix_compressor_plg_d2i_no_info_CPPFLAGS = -DWITHOUT_COMPRESSOR_INFO
+mpix_compressor_plg_d2i_no_info_LDADD = $(LDADD) libmpix_compressor_d2i.la
+mpix_compressor_plg_d2i_no_info_CPPFLAGS = $(AM_CPPFLAGS) -DWITHOUT_COMPRESSOR_INFO
 
 mpix_compressor_plg_c2i_no_info_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_c2i_no_info_LDADD = libmpix_compressor_c2i.la
-mpix_compressor_plg_c2i_no_info_CPPFLAGS = -DWITHOUT_COMPRESSOR_INFO
+mpix_compressor_plg_c2i_no_info_LDADD = $(LDADD) libmpix_compressor_c2i.la
+mpix_compressor_plg_c2i_no_info_CPPFLAGS = $(AM_CPPFLAGS) -DWITHOUT_COMPRESSOR_INFO
 
 mpix_compressor_plg_c2d2i_no_info_SOURCES = mpix_compressor_plg.c
-mpix_compressor_plg_c2d2i_no_info_LDADD = libmpix_compressor_c2d2i.la
-mpix_compressor_plg_c2d2i_no_info_CPPFLAGS = -DWITHOUT_COMPRESSOR_INFO
+mpix_compressor_plg_c2d2i_no_info_LDADD = $(LDADD) libmpix_compressor_c2d2i.la
+mpix_compressor_plg_c2d2i_no_info_CPPFLAGS = $(AM_CPPFLAGS) -DWITHOUT_COMPRESSOR_INFO
 
 mpix_compressor_nop_info_comm_SOURCES = mpix_compressor_nop.c
 mpix_compressor_nop_info_comm_CPPFLAGS = $(AM_CPPFLAGS) -DWITH_INFO_VIA_COMM
