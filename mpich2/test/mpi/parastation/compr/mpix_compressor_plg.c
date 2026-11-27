@@ -12,11 +12,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "mpitest.h"
+#include "mpitestconf.h"
 
 #define partitions 2
 #define total_count 32
 double buffer[total_count];
 const double const_double_value = 3.14159265;
+
+const char *test_function;
+
+#define test_handle(function)                                           \
+    test_function = #function ;                                         \
+    do {                                                                \
+        function;                                                       \
+    } while (0);
+
+#define test_assert(expression, string, ...)                            \
+    if (!(expression)) {                                                \
+        fprintf(stderr, "ERROR: %s " string " (%s:%d)\n",               \
+                test_function,                                          \
+                __VA_ARGS__, __FILE__, __LINE__);                       \
+        errs++;                                                         \
+    }
+
+#define test_assert_key(key, flag)                                      \
+    test_assert(flag, "did not find key \"%s\"", key);
 
 /* This test program is to check the envisioned functionality of the proposed API extension
  * of the MPI interface by `MPIX_Register_compressor()`, working as a transparent plugin.
@@ -38,23 +59,37 @@ int main(int argc, char *argv[])
     MPI_Info info;
     int rank, size;
     MPI_Datatype dtype = MPI_DOUBLE;
+    char value[MPI_MAX_INFO_VAL];
+    int buflen = 0;
+    char *key = NULL;
+    int flag;
 
-    MPI_Init(&argc, &argv);
+    MTest_Init(&argc, &argv);
 
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     MPI_Info_create(&info);
-    MPI_Info_set(info, "compressor", "darexa-f");
+    MPI_Info_set(info, "compressor", "pscompr");
 
     if (argc > 1) {
-        MPI_Info_set(info, "compressor_plugin", argv[1]);
+        if (!strcmp(argv[1], "double")) {
+            dtype = MPI_DOUBLE;
+        } else if (!strcmp(argv[1], "double_complex")) {
+            dtype = MPI_DOUBLE_COMPLEX;
+        }
     }
 
     if (argc > 2) {
-        if (!strcmp(argv[2], "double_complex")) {
-            dtype = MPI_DOUBLE_COMPLEX;
-        }
+        MPI_Info_set(info, "compressor", argv[2]);
+    }
+
+    if (argc > 3) {
+        MPI_Info_set(info, "compressor_plugin", argv[3]);
+    }
+
+    if (argc > 4) {
+        MPI_Info_set(info, "compressor_plugins", argv[4]);
     }
 
     if (rank == 0) {
@@ -96,14 +131,27 @@ int main(int argc, char *argv[])
 
     MPI_Request_free(&request);
 
+    /* Retrieve and store the compressor name for a final validity check. */
+    key = "compressor";
+    buflen = MPI_MAX_INFO_VAL;
+    test_handle(MPI_Info_get_string(info, key, &buflen, value, &flag));
+    test_assert_key(key, flag);
+    char *compr_name = flag ? strdup(value) : NULL;
+
     MPI_Info_free(&info);
 
-    MPI_Finalize();
-
-    if (!errs) {
-        if (!rank)
-            printf(" No Errors\n");
-        return 0;
+    /* Check if a matching compressor plugin has actually been registered (implicitly) up to now. */
+    test_handle(MPI_Info_create_env(0, NULL, &info));
+    test_assert(info != MPI_INFO_NULL, "returned MPI_INFO_NULL (%p).", &info);
+    key = "compressor";
+    buflen = MPI_MAX_INFO_VAL;
+    test_handle(MPI_Info_get_string(info, key, &buflen, value, &flag));
+    test_assert_key(key, flag);
+    if (flag && compr_name) {
+        test_assert(!strcmp(value, compr_name),
+                    "returned value \"%s\" that is not the right compressor", value);
     }
-    return 1;
+
+    MTest_Finalize(errs);
+    return MTestReturnValue(errs);
 }

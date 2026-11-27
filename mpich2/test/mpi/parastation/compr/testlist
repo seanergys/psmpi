@@ -4,8 +4,25 @@ mpix_compressor_d2i_derived 2
 mpix_compressor_c2i 2
 mpix_compressor_c2i_derived 2
 mpix_compressor_c2d2i 2
-mpix_compressor_plg_nop 2 arg=./.libs/libmpix_compressor_nop.so env=PSP_COMPRESSOR_PLUGINS=1
-mpix_compressor_plg_d2i 2 arg=./.libs/libmpix_compressor_d2i.so env=PSP_COMPRESSOR_PLUGINS=1
-mpix_compressor_plg_c2i 2 arg=./.libs/libmpix_compressor_c2i.so arg=double_complex env=PSP_COMPRESSOR_PLUGINS=1
-mpix_compressor_plg_c2d2i 2 arg=./.libs/libmpix_compressor_c2d2i.so arg=double_complex env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_nop_info_comm 2
+mpix_compressor_d2i_info_comm 2
+mpix_compressor_c2i_info_comm 2
+mpix_compressor_c2d2i_info_comm 2
+mpix_compressor_plg_nop 2 arg=double arg=pscompr_nop arg=./.libs/libmpix_compressor_nop.so env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i arg=./.libs/libmpix_compressor_d2i.so env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_plg_c2i 2 arg=double_complex arg=pscompr_c2i arg=./.libs/libmpix_compressor_c2i.so env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_plg_c2d2i 2 arg=double_complex arg=pscompr_c2d2i arg=./.libs/libmpix_compressor_c2d2i.so env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_plg_nop_no_info 2 arg=double arg=pscompr_nop env=PSP_COMPRESSOR_PLUGINS=./.libs/libmpix_compressor_nop.so
+mpix_compressor_plg_d2i_no_info 2 arg=double arg=pscompr_d2i env=PSP_COMPRESSOR_PLUGINS=./.libs/libmpix_compressor_d2i.so
+mpix_compressor_plg_c2i_no_info 2 arg=double_complex arg=pscompr_c2i env=PSP_COMPRESSOR_PLUGINS=./.libs/libmpix_compressor_c2i.so
+mpix_compressor_plg_c2d2i_no_info 2 arg=double_complex arg=pscompr_c2d2i env=PSP_COMPRESSOR_PLUGINS=./.libs/libmpix_compressor_c2d2i.so
 mpix_compressor_info 1
+# test comma-separated lists of compressor names (vary the position of the appropriate compressor):
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i arg=./.libs/libmpix_compressor_d2i.so,foo,bar env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i arg=foo,./.libs/libmpix_compressor_d2i.so,bar env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i arg=foo,bar,./.libs/libmpix_compressor_d2i.so env=PSP_COMPRESSOR_PLUGINS=1
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i env=PSP_COMPRESSOR_PLUGINS=./.libs/libmpix_compressor_d2i.so,foo,bar
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i env=PSP_COMPRESSOR_PLUGINS=foo,./.libs/libmpix_compressor_d2i.so,bar
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i env=PSP_COMPRESSOR_PLUGINS=foo,bar,./.libs/libmpix_compressor_d2i.so
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i arg=foo,bar env=PSP_COMPRESSOR_PLUGINS=zab,./.libs/libmpix_compressor_d2i.so
+mpix_compressor_plg_d2i 2 arg=double arg=pscompr_d2i arg=./.libs/libmpix_compressor_nop.so,./.libs/libmpix_compressor_nop.so,./.libs/libmpix_compressor_d2i.so env=PSP_COMPRESSOR_PLUGINS=1

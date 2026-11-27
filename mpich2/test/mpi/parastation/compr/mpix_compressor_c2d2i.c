@@ -11,10 +11,15 @@
 #include "mpi.h"
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 #ifndef WITH_COMPRESSOR_PLUGIN
 #include "mpitest.h"
 #include "mpitestconf.h"
 #include <stdio.h>
+#endif
+
+#ifndef COMPRESSOR_NAME
+#define COMPRESSOR_NAME "pscompr_c2d2i"
 #endif
 
 #ifdef WITH_COMPRESSOR_PLUGIN
@@ -96,12 +101,15 @@ int compressor_inflate(void *buf, int partition, MPI_Count count, MPI_Datatype d
 /* entry function for compressor plugin */
 int compressor_register(const char *name, MPI_Info info)
 {
-    MPIX_Register_compressor(name,
-                             compressor_req_init,
-                             MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
-                             compressor_deflate,
-                             compressor_inflate,
-                             MPIX_COMPRESSOR_DEREGISTER_FN_NULL, MPI_INFO_NULL, NULL);
+    /* Register only if the requested name matches the name of this plugin: */
+    if (!strcmp(name, COMPRESSOR_NAME)) {
+        MPIX_Register_compressor(name,
+                                 compressor_req_init,
+                                 MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
+                                 compressor_deflate,
+                                 compressor_inflate,
+                                 MPIX_COMPRESSOR_DEREGISTER_FN_NULL, MPI_INFO_NULL, NULL);
+    }
 
     return MPI_SUCCESS;
 }
@@ -141,15 +149,19 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    MPIX_Register_compressor("darexa-f",
+    MPIX_Register_compressor(COMPRESSOR_NAME,
                              compressor_req_init,
                              MPIX_COMPRESSOR_REQ_FREE_FN_NULL,
                              compressor_deflate, compressor_inflate,
                              MPIX_COMPRESSOR_DEREGISTER_FN_NULL, MPI_INFO_NULL, NULL);
 
     MPI_Info_create(&info);
-    MPI_Info_set(info, "compressor", "darexa-f");
-    MPI_Info_set(info, "compressor_plugin", "libmpix_compressor_d2i.so");
+    MPI_Info_set(info, "compressor", COMPRESSOR_NAME);
+
+#ifdef WITH_INFO_VIA_COMM
+    MPI_Comm_set_info(MPI_COMM_WORLD, info);
+    MPI_Info_free(&info);
+#endif
 
     if (rank == 0) {
 
@@ -192,7 +204,9 @@ int main(int argc, char *argv[])
 
     MPI_Request_free(&request);
 
-    MPI_Info_free(&info);
+    if (info != MPI_INFO_NULL) {
+        MPI_Info_free(&info);
+    }
 
     MPI_Finalize();
 

@@ -15,7 +15,8 @@
 #include "mpid_psp_packed_msg.h"
 
 #define MPIDI_PSP_PART_REQ_USES_COMPRESSOR(_preq)                       \
-    (_preq->compr_req && _preq->compr_req->compressor &&                \
+    (MPIDI_Process.env.compressor.enable_support &&                     \
+     _preq->compr_req && _preq->compr_req->compressor &&                \
      _preq->compr_req->compressor->inflate_fn &&                        \
      (_preq->compr_req->compressor->inflate_fn !=                       \
       MPIX_COMPRESSOR_CONVERSION_FN_NULL))
@@ -645,9 +646,12 @@ static
 int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
 {
     int mpi_errno = MPI_SUCCESS;
+    struct MPID_DEV_Request_partitioned *preq = &req->dev.kind.partitioned;
 
-    if (!info) {
-        return MPI_SUCCESS;
+    MPIR_CHKPMEM_DECL();
+
+    if (!info || !MPIDI_Process.env.compressor.enable_support) {
+        goto fn_exit;
     }
 
     /* Check if the use of a payload compressor is requested. */
@@ -655,9 +659,8 @@ int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
     char info_compressor_name[MPI_MAX_INFO_VAL + 1];
     MPIR_Info_get_impl(info, compressor_info_key, MPI_MAX_INFO_VAL, info_compressor_name,
                        &info_flag);
-    if (info_flag) {
-
-        struct MPID_DEV_Request_partitioned *preq = &req->dev.kind.partitioned;
+    /* Requested and not already considered? */
+    if (info_flag && !preq->compr_req) {
 
         if (preq->part_per_req != 1) {
             /* For this prototype implementation, we only support
@@ -671,47 +674,94 @@ int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
         /* If not found, check if a matching compressor plugin can be loaded. */
         if (!compressor_found) {
 
-            if (!MPIDI_Process.env.enable_compressor_plugins) {
+            if (!MPIDI_Process.env.compressor.enable_plugins_str ||
+                (MPIDI_Process.env.compressor.enable_plugins_str[0] == '\0') ||
+                (strcmp(MPIDI_Process.env.compressor.enable_plugins_str, "0") == 0)) {
                 /* Compressor plugins not activated at runtime: Do nothing! */
                 goto fn_exit;
             }
 
-            /* First check if a plugin name was given. */
-            char info_compressor_plugin[MPI_MAX_INFO_VAL + 1];
+            /* First check if (a list of) plugin name(s) was given via the info object. */
+            char info_compressor_plugins[MPI_MAX_INFO_VAL + 1] = { 0 };
             MPIR_Info_get_impl(info, compressor_info_key_plugin, MPI_MAX_INFO_VAL,
-                               info_compressor_plugin, &info_flag);
+                               info_compressor_plugins, &info_flag);
             if (!info_flag) {
-                goto fn_exit;
+                MPIR_Info_get_impl(info, compressor_info_key_plugin_list, MPI_MAX_INFO_VAL,
+                                   info_compressor_plugins, &info_flag);
+            } else {
+                /* In case both info keys are given, concatenate them then into a comma-separated list. */
+                size_t list_len = strlen(info_compressor_plugins);
+                if (list_len < MPI_MAX_INFO_VAL) {
+                    info_compressor_plugins[list_len] = ',';
+                    info_compressor_plugins[list_len + 1] = '\0';
+                    MPIR_Info_get_impl(info, compressor_info_key_plugin_list,
+                                       MPI_MAX_INFO_VAL - list_len - 1,
+                                       info_compressor_plugins + list_len + 1, &info_flag);
+                    if (!info_flag) {
+                        info_compressor_plugins[list_len] = '\0';
+                    }
+                }
             }
 
-            /* If so, try to load the shared library and call the register function. */
-            void *dlhandle;
-            char *dlerror_str;
-            MPIX_Compressor_register_plugin_function *compressor_register_fn;
+            /* Additionally, check if there is a plugin name/list (and not just "1" for "enabled")
+             * given via the environment variable. */
+            if (strcmp(MPIDI_Process.env.compressor.enable_plugins_str, "1") != 0) {
+                /* If yes, append this string to `info_compressor_plugins` as a comma-separated list. */
+                size_t list_len = strlen(info_compressor_plugins);
+                int retval =
+                    snprintf(info_compressor_plugins + list_len, MPI_MAX_INFO_VAL - list_len,
+                             "%s%s", list_len ? "," : "",
+                             MPIDI_Process.env.compressor.enable_plugins_str);
+                if ((retval < 0) || ((size_t) retval >= MPI_MAX_INFO_VAL - list_len)) { /* Truncated? */
+                    info_compressor_plugins[list_len] = '\0';   /* If so, just undo the appending. */
+                }
+            }
+            /* Loop over all given plugin names in the comma-separated list. Note that a given plugin
+             * (following the BusyBox principle) may well be responsible for *multiple* compressors.
+             * The entry function for registering then has to determine, based on the compressor name,
+             * whether the plugin can handle the requested compressor or not. */
+            for (char *save_ptr = NULL, *plugin_name =
+                 strtok_r(info_compressor_plugins, compressor_info_key_plugin_separator, &save_ptr);
+                 plugin_name != NULL;
+                 plugin_name = strtok_r(NULL, compressor_info_key_plugin_separator, &save_ptr)) {
 
-            dlerror();
-            dlhandle = dlopen(info_compressor_plugin, RTLD_LAZY);
-            dlerror_str = dlerror();
-            if (!dlhandle || dlerror_str) {
-                goto fn_exit;
+                /* Try to load the shared library and call the register function. */
+                void *dlhandle;
+                char *dlerror_str;
+                MPIX_Compressor_register_plugin_function *compressor_register_fn;
+
+                /* We don't need to check here whether these have already been loaded, because opening them
+                 * multiple times via `dlopen()` shouldn't be a problem (also in terms of resource usage).
+                 * Note that the loaded shared-library is implicitly released at the end of the process. */
+                dlerror();
+                dlhandle = dlopen(plugin_name, RTLD_LAZY);
+                dlerror_str = dlerror();
+                if (!dlhandle || dlerror_str) {
+                    continue;
+                }
+
+                dlerror();
+                compressor_register_fn = dlsym(dlhandle, compressor_register_plugin_fn);
+                dlerror_str = dlerror();
+                if (dlerror_str) {
+                    continue;
+                }
+
+                mpi_errno = compressor_register_fn(info_compressor_name, info->handle);
+                if (mpi_errno != MPI_SUCCESS) {
+                    /* No error code generation: A failing `compressor_register_fn` is not to be
+                     * treated as an MPI error. This just deactivates the compressor use. */
+                    mpi_errno = MPI_SUCCESS;
+                    continue;
+                }
+
+                /* ...and then retry the lookup.  */
+                MPIR_Compressor_lookup(info_compressor_name, &compressor_found);
+                if (compressor_found) {
+                    break;
+                }
             }
 
-            dlerror();
-            compressor_register_fn = dlsym(dlhandle, compressor_register_plugin_fn);
-            dlerror_str = dlerror();
-            if (dlerror_str) {
-                goto fn_exit;
-            }
-
-            mpi_errno = compressor_register_fn(info_compressor_name, info->handle);
-            if (mpi_errno != MPI_SUCCESS) {
-                /* No error code generation: A failing `compressor_register_fn` is not to be
-                 * treated as an MPI error. This just deactivates the compressor use. */
-                goto fn_exit;
-            }
-
-            /* ...and then retry the lookup.  */
-            MPIR_Compressor_lookup(info_compressor_name, &compressor_found);
             if (!compressor_found) {
                 goto fn_exit;
             }
@@ -721,35 +771,58 @@ int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
         void *buffer = NULL;
         int buf_free = 0;
 
-        MPIR_Assertp(compressor_found);
+        MPIR_Assert(compressor_found);
 
-        /* create the compressor-related part of th request */
-        preq->compr_req = MPL_calloc(1, sizeof(struct MPIR_Compressor_request_part), MPL_MEM_OTHER);
+        /* create the compressor-related part of the request */
+        MPIR_CHKPMEM_MALLOC(preq->compr_req, sizeof(struct MPIR_Compressor_request_part),
+                            MPL_MEM_OTHER);
+        memset(preq->compr_req, 0, sizeof(struct MPIR_Compressor_request_part));
 
         if (compressor_found->req_init_fn &&
             (compressor_found->req_init_fn != MPIX_COMPRESSOR_REQ_INIT_FN_NULL)) {
 
-            if (HANDLE_IS_BUILTIN(preq->datatype)) {
+            void *extra_req_state = &preq->compr_req->extra_req_state;
+
+            /* Use Use temporary variables to preserve the original state in case of an error. */
+            int partitions_tmp = preq->partitions;
+            MPI_Count count_tmp = preq->count;
+            MPI_Datatype datatype_tmp = preq->datatype;
+
+            if (HANDLE_IS_BUILTIN(datatype_tmp)) {
                 /* For built-in dtypes, we need to temporarily convert them back to the external format. */
-                preq->datatype = MPIR_DATATYPE_GET_ORIG_BUILTIN(preq->datatype);
+                datatype_tmp = MPIR_DATATYPE_GET_ORIG_BUILTIN(datatype_tmp);
             }
 
-            void *extra_req_state = &preq->compr_req->extra_req_state;
             mpi_errno =
-                compressor_found->req_init_fn(preq->buf, &preq->partitions, &preq->count,
-                                              &preq->datatype, info->handle, &buffer, &size,
+                compressor_found->req_init_fn(preq->buf, &partitions_tmp, &count_tmp,
+                                              &datatype_tmp, info->handle, &buffer, &size,
                                               compressor_found->extra_state, extra_req_state);
-            if (mpi_errno != MPI_SUCCESS) {
+
+            /* ToDo: Make validity check for a modified datatype more comprehensive. */
+            if ((mpi_errno != MPI_SUCCESS) || (count_tmp < 0) || (partitions_tmp <= 0) ||
+                (datatype_tmp == MPI_DATATYPE_NULL)) {
                 /* No error code generation: A failing `req_init_fn` is not to be treated as
                  * an MPI error. This just deactivates the compressor use for this request. */
+                mpi_errno = MPI_SUCCESS;
+                MPIR_CHKPMEM_REAP();
+                preq->compr_req = NULL;
                 goto fn_exit;
             }
 
             /* Restore the internal format (if necessary). */
-            MPIR_DATATYPE_REPLACE_BUILTIN(preq->datatype);
+            MPIR_DATATYPE_REPLACE_BUILTIN(datatype_tmp);
+
+            /* Adjust the parameters to the possibly changed values. */
+            preq->partitions = partitions_tmp;
+            preq->count = count_tmp;
+            preq->datatype = datatype_tmp;
+            MPID_part_distribute_partitions_to_requests(req);
+            /* For this prototype implementation, we still assume that the number
+             * of requests and partitions must be equal. (See also comment above.) */
+            MPIR_Assert(preq->part_per_req == 1);
         }
 
-        if (!size) {
+        if (size <= 0) {
             /* Either no `req_init_fn` given or `req_init_fn` returned `size = 0`. In both cases,
              * we allocate an auxiliary buffer that is as large as the user buffer, since the
              * assumption is that compression only makes things smaller, but not larger. */
@@ -761,7 +834,7 @@ int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
         if (!buffer || (buffer == MPI_BUFFER_AUTOMATIC)) {
             /* Either `buffer` has not been set by the compressor or MPI_BUFFER_AUTOMATIC
              * was chosen. In both cases we allocate the buffer on the MPI side. */
-            buffer = MPL_malloc(size, MPL_MEM_BUFFER);
+            MPIR_CHKPMEM_MALLOC(buffer, size, MPL_MEM_BUFFER);
             buf_free = 1;
         }
 
@@ -773,6 +846,9 @@ int MPIDI_PSP_part_check_info(MPIR_Info * info, MPIR_Request * req)
 
   fn_exit:
     return mpi_errno;
+  fn_fail:
+    MPIR_CHKPMEM_REAP();
+    goto fn_exit;
 }
 
 /**
@@ -841,7 +917,11 @@ int MPID_PSP_part_init_common(const void *buf, int partitions, MPI_Count count,
     /* compute and save initial settings for partitioned communication */
     MPID_part_distribute_partitions_to_requests(req);
 
+    /* First check for an explicitly given info object, ... */
     mpi_errno = MPIDI_PSP_part_check_info(info, req);
+    MPIR_ERR_CHECK(mpi_errno);
+    /* ...then check for an info object attached to comm. */
+    mpi_errno = MPIDI_PSP_part_check_info(comm->info_ptr, req);
     MPIR_ERR_CHECK(mpi_errno);
 
     *request = req;
